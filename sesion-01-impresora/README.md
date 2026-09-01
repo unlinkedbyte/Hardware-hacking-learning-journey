@@ -378,7 +378,7 @@ Dicho esto, las dos posibilidades que doy asumen que el volcado refleja lo que h
 
 Bueno, me ha llevado más días de los esperados pero no ha estado mal esta sesión.
 
-La hipótesis del duplicado es, al final, solo una hipótesis. La impresora ya está para tirar, pero dejo el .bin en el repo por si alguien quiere mirarlo. 
+La hipótesis del duplicado es, al final, solo una hipótesis. Pero dejo el .bin en el repo por si alguien quiere mirarlo. 
 
 El siguiente probablemente sea el router que tengo pendiente, pero no puedo asegurar cuándo. Todavía tengo pendiente en el repo de reversing analizar más a fondo el firmware de un router de TP-Link que me descargué de su web oficial, aprender la ISA y ABI de MIPS, seguir estudiando... Pero irán llegando cosas poco a poco. Este writeup era para enseñar y autoenseñarme la metodología, aunque no todo es un método extrapolable debo aclarar. 
 
