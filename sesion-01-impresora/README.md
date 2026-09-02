@@ -118,7 +118,7 @@ Cuando miras la PCB de esta impresora, vemos con las explicaciones anteriores qu
 
 La conclusión, básicamente, es que como objetivo de hardware hacking es flojo, porque lo interesante (el firmware) está donde no podemos llegar y no hay superficie de red. Como campo de prácticas, eso sí, es perfecto (componentes reales, SOIC-8, BGA..).
 
-Algo que quiero añadir. Cuando pensamos en hardware hacking, hay dos caminos en los que podemos pensar. La parte de la derecha es como un medio para un fin (poder extraer firmware, analizar lo que no está público, buscar vulnerabilidades). La otra parte es que, cuando no es posible por ningún medio (bien sea porque está cifrado o el motivo que sea), entonces es donde tenemos las técnicas físicas (side channel attacks, fault injection, glitching... entre otros). Igual que la ingeniería inversa, es un campo complejo y extenso. Tengo pensado traer un objetivo que no está apuntado en la lista en su momento, cuando tenga algo más de material (supuestamente es de los sencillos, pero es donde iremos por hardware más que por software). Lo dejo como sorpresa. Eso sí, no puedo asegurar cuánto tardaré en traerlo. Ahora bien, pese a esta metáfora, muchas veces usamos la parte física para poder acceder a la parte del software, no son excluyentes.
+Algo que quiero añadir. Cuando pensamos en hardware hacking, hay dos caminos en los que podemos pensar. La parte de la derecha es como un medio para un fin (poder extraer firmware, analizar lo que no está público, buscar vulnerabilidades). La otra parte es que, cuando no es posible por ningún medio (bien sea porque está cifrado o el motivo que sea), entonces es donde tenemos las técnicas físicas (side channel attacks, fault injection, glitching... entre otros). Igual que la ingeniería inversa, es un campo complejo y extenso. Tengo pensado traer un objetivo que no está apuntado en la lista en su momento, cuando tenga algo más de material (supuestamente es de los sencillos, pero es donde iremos por hardware más que por software). Lo dejo como sorpresa. Eso sí, no puedo asegurar cuánto tardaré en traerlo. Ahora bien, muchas veces usamos la parte física para poder acceder a la parte del software, no son excluyentes.
 
 ### Reconocimiento: identificación de chips
 
@@ -374,11 +374,156 @@ Lo único que puedo decir más o menos después de haberlo mirado es el motivo p
 
 Dicho esto, las dos posibilidades que doy asumen que el volcado refleja lo que hay en el chip. Podría ser producto de cómo la herramienta lee esta EEPROM en concreto también. No sé lo suficiente todavía para descartarlo, y ya no tengo la impresora, así que queda abierto.
 
+**Sección añadida a posteriori**
+
+Repasando este writeup con un LLM, me señaló que la explicación que yo había dejado abierta al final del apartado anterior (que el duplicado pudiera ser artefacto de la herramienta) tenía un mecanismo concreto detrás. He vuelto al laboratorio a comprobarlo y resulta que hay resultados distintos. Voy a dejarlo apuntado por si me puede servir para el futuro al volver a leerlo.
+
+Esta explicación no es mía, pero la voy a dejar apuntada igualmente.
+
+El volcado de 512 bytes salía con dos estructuras idénticas, una en la primera mitad y otra en la segunda, y las explicaciones que yo di con mis conocimientos actuales era posible redundancia o wear leveling, o que las dos asumían que el volcado reflejaba lo que hay en el chip. 
+
+Resulta que no lo reflejaba. Vamos por partes.
+
+Por la serigrafía sabíamos que la 24C04 guarda 512 bytes, hasta aquí bien. Lo que no sabía es que por dentro no son 512 posiciones seguidas. Están partidos en dos bloques de 256 bytes, y el chip solo puede exponer uno de los dos a la vez. El LLM ponía un ejemplo de tomarlo como un archivador con dos cajones de 256 casillas cada uno; y para pedir una casilla tienes que decir dos cosas: qué cajon y qué casilla dentro del cajón.
+
+El motivo es que la casilla se pide con un byte, y un byte solo llega hasta 255. Falta un bit en alguna parte. Y ese bit lo meten dentro del byte de dirección del dispositivo, el que mandas por el bus I2C para identificar con quién estás hablando antes de pedir nada.
+
+```text
+  bit:    7   6   5   4    3    2    1     0
+          1   0   1   0    A2   A1   P0   R/W
+          └──── ┬ ────┘   └─ ┬ ─┘    │     └── 0 = escribir, 1 = leer
+            prefijo fijo    pines    │
+           "soy una EEPROM"  de      └── ESTE elige el bloque
+                          dirección       0 = bytes 0..255
+                                          1 = bytes 256..511
+
+```
+
+Ese P0 que nos indica el LLM es la clave de todo lo que viene. Son dos bytes distintos que se mandan uno detrás de otro, y el bit del bloque viaja en el primero. Así que para leer el chip entero la herramienta tiene que hacer dos pasadas: P0 a 0 y leer 256 casillas, luego P0 a 1 y leer otras 256. Como digo, P0 vive en el byte de dirección del dispositivo, no en el byte del número de casilla.
+
+La causa exacta es un OR que deja el bit clavado. ch341eeprom tiene en ch341eeprom.h una tabla con una fila por modelo del chip. La de la nuestra es esta:
+
+```c
+{ "24c04",   512,    16,  1, 0x01},   // el ultimo campo es 'addr'
+```
+
+Y en ch341funcs.c dentro de ch341ReadCmdMarshall(), el bit del bloque se calcula así:
+
+```c
+msb_addr = (addr>>8 & 7) | eeprom_info->addr;
+//          └──── el bit que TOCA ────┘   └── ese 0x01 de la tabla
+//           segun donde estemos leyendo
+```
+
+Es un OR. Y cualquier cosa OR 1 da 1, siempre. Así que msb_addr vale 1 pase lo que pase, y el bit del bloque se queda clavado en 1 en las dos pasadas.
+
+La consecuencia de todo esto es que la herramienta pidió el bloque de arriba en las dos pasadas. Mi fichero de 512 bytes era el mismo bloque de 256 pegado consigo mismo. El bloque de abajo no se pidió nunca. Por eso las dos mitades salían idénticas hasta el último byte, por lo que era el programador preguntando dos veces lo mismo. Y, por cierto, el propio repositorio upstream es consciente de que la ruta está rota. Hay un commit titulado *"Restores the same broken 9-11 and 17 bit functionality for writing".*
+
+**Cómo se soluciona**
+
+La herramienta tiene una flag -c/--chip-select que machaca ese campo de la tabla. Poniéndolo a 0, el OR deja de estorbar y el bit sale limpio del offset:
+
+```bash
+sudo ./ch341eeprom -s 24c04 -c 0 -r dump_c0.bin
+```
+
+```text
+Read [512] bytes from [24c04] EEPROM
+Wrote [512] bytes to file [dump_c0.bin]
+```
+
+El orden de las flags importa en este caso. `-s 24c04` copia la fila entera de la tabla a memoria, incluido ese campo. Si escribes -c 0 -s 24c04, el -s se ejecuta después y te vuelve a meter el 0x01, dejándote como estabas. Tiene que ir -s primero y -c después. 
+
+Si prefieres no depender del orden, la alternativa es cambiar el 0x01 por 0x00 en la tabla de ch341eeprom.h y recompilar.
+
+**La comprobación**
+
+Como no me quería quedar con un solo volcado nuevo y darlo por bueno, hicimos 3 cosas.
+
+1. Estabilidad. Dos lecturas seguidas con -c 0, hashes idénticos. La lectura era estable, igual que en el apartado anterior.
+
+2. Las mitades ya no coinciden. Ahora, solo se mantiene la segunda parte de la estructura.
+
+3. El control, que es la prueba definitiva. Forzamos el bit 1 a mano, es decir, le pedimos explícitamente a la herramienta que haga lo que se sospechaba que hacía sola:
+
+```bash
+sudo ./ch341eeprom -s 24c04 -c 1 -r dump_c1.bin
+md5sum dump_c1.bin dump1.bin
+```
+
+```bash
+2d845091c92109e6e3bebcac79a9b264  dump_c1.bin
+2d845091c92109e6e3bebcac79a9b264  dump1.bin
+```
+
+Reproduce el fichero original clavado. Si el comportamiento por defecto se reproduce pidiendo a mano lo incorrecto, entonces el comportamiento por defecto era incorrecto. 
+
+**El volcado bueno**
+
+Aquí están los 512 bytes reales del chip (lo he convertido antes a hex con nvim):
+
+```bash
+cat dump_c0.bin
+───────┬──────────────────────────────────────────────────────────────────────────────────────────────────
+       │ File: dump_c0.bin
+───────┼──────────────────────────────────────────────────────────────────────────────────────────────────
+   1   │ 00000000: 405d 0001 ffff ffff ff89 0015 6037 2002  @]..........`7 .
+   2   │ 00000010: 003f 0050 000a 0046 401d 403d 44f4 a921  .?.P...F@.@=D..!
+   3   │ 00000020: bb69 6c98 c3ae c583 4b2c a450 0913 2f3d  .il.....K,.P../=
+   4   │ 00000030: 7ab2 f441 118b 460c 1073 cbcb 4e5e 6000  z..A..F..s..N^`.
+   5   │ 00000040: fc01 1e45 004e 4354 1e08 6846 c666 8828  ...E.NCT..hF.f.(
+   6   │ 00000050: 8626 86c6 1f41 9803 570e 41e0 000e 2e88  .&...A..W.A.....
+   7   │ 00000060: 0000 33f5 7800 295c 9a20 24c1 70d8 2b25  ..3.x.)\. $.p.+%
+   8   │ 00000070: b110 0000 0000 0000 0000 0000 0000 87ca  ................
+   9   │ 00000080: 7360 6dac e2c8 5288 a5e0 4ef1 bfe8 0000  s`m...R...N.....
+  10   │ 00000090: 0000 0000 0000 0000 0007 96d2 f140 1406  .............@..
+  11   │ 000000a0: f626 8c49 80a3 9928 20a3 9928 68c4 9800  .&.I...( ..(h...
+  12   │ 000000b0: 0000 028f 249d a202 6500 0000 0536 eddb  ....$...e....6..
+  13   │ 000000c0: b400 02f0 1f20 00d8 0000 0000 0000 028f  ..... ..........
+  14   │ 000000d0: a490 01f6 6a20 0197 17b8 01cd 03e8 0000  ....j ..........
+  15   │ 000000e0: 0078 8968 00ba 9048 0000 012f 37b9 0000  .x.h...H.../7...
+  16   │ 000000f0: 0000 0000 0000 0000 aced 0000 0000 0000  ................
+  17   │ 00000100: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+  18   │ 00000110: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+  19   │ 00000120: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+  20   │ 00000130: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+  21   │ 00000140: aced 01fd 03f1 0346 0471 0401 05bd 0280  .......F.q......
+  22   │ 00000150: 6410 0181 5000 0000 00d0 0400 0180 1f0a  d...P...........
+  23   │ 00000160: 9e24 c20d 1ae4 17e6 1deb 1fe9 0005 0000  .$..............
+  24   │ 00000170: ffe5 fc57 fdee fec4 fb08 f6cb f271 eee5  ...W.........q..
+  25   │ 00000180: ecf4 eb4c f48b 01a1 e96f fa3a fe61 fa80  ...L.....o.:.a..
+  26   │ 00000190: ff39 fe2f 02fa 0835 0000 0000 2658 fbbc  .9./...5....&X..
+  27   │ 000001a0: 8900 1560 3720 0200 3f00 5000 0a00 4640  ...`7 ..?.P...F@
+  28   │ 000001b0: 1d40 3d44 f4a9 21bb 696c 98c3 aec5 834b  .@=D..!.il.....K
+  29   │ 000001c0: 2ca4 5009 132f 3d7a b2f4 4111 8b46 0c10  ,.P../=z..A..F..
+  30   │ 000001d0: 73cb cb4e 5e60 00fc 011e 4500 4e43 541e  s..N^`....E.NCT.
+  31   │ 000001e0: 0868 46c6 6688 2886 2686 c61f 4198 0357  .hF.f.(.&...A..W
+  32   │ 000001f0: 0e41 ffff ffff ffff ffff ffff ffff ffff  .A..............
+```
+
+Ahora un apunte que estaría bien hacer es que una EEPROM borrada lee FF, no 00. Así que los 14 bytes del final es zona virgen, pero los 64 bytes de 0x100 son datos escritos o borrados a propósito por el firmware. 
+
+Ahora, con estos 512 bytes delante, la hipótesis de las dos copias idénticas queda descartada. La idea del wear leveling no, por estos 82 bytes:
+
+```text
+89 00 15 60 37 20 02 00 3f 00 50 00 0a 00 46 40 1d 40 3d 44 f4 a9 21 bb
+69 6c 98 c3 ae c5 83 4b 2c a4 50 09 13 2f 3d 7a b2 f4 41 11 8b 46 0c 10
+73 cb cb 4e 5e 60 00 fc 01 1e 45 00 4e 43 54 1e 08 68 46 c6 66 88 28 86
+26 86 c6 1f 41 98 03 57 0e 41
+```
+
+Estos 82 bytes se repiten en ambos bloques, pero desplazados: en 0x1A0-0x1F1 acaban justo antes de los 14 bytes FF finales, y en 0x009-0x05A están al principio, después de los cinco FF de la primera línea. Fíjate en la asimetría: en 0x1F0 la secuencia termina en 0e 41 y a partir de ahí solo hay relleno, mientras que en 0x059 aparece el mismo 0e 41 pero la cosa continúa con más datos.
+
+Un duplicado parcial a offsets desplazados es la huella que dejaría un esquema de escritura rotativa, donde cada versión nueva del registro se escribe en una posición distinta para repartir el desgaste y lo que no ha cambiado entre versiones acaba repetido pero movido de sitio. Dicho esto, también debemos dejarlo como una lectura posible simplemente. Esos 82 bytes podrían ser igual de bien una tabla fija (calibración del cabezal, por ejemplo) que el firmware replica en dos sitios por diseño. Lo que zanjaría la duda sería imprimir una página y hacer un diff para ver qué bytes se mueven, aunque no es posible porque la impresora ya no la tengo como tal. Así que queda abierto, pero ahora con los 512 bytes reales en la mano y con una explicación menos de por medio.
+
+Dicho esto, hoy voy a dejarlo ya aquí. Para mí, tener que subir esto es una gran derrota. Culpa mía por no haber repasado el código en C de la herramienta y por haber dado como válidas las primeras hipótesis dada mi actual ignorancia. Dejo el nuevo .bin con el -c 0 para quien se lo quiera ver y me voy a descansar hoy. El hecho del LLM, estas correcciones, escribir algo que no tenga mis palabras o conocimientos... Me hace sentir un poco inútil. Pero repito, es culpa mía. Hoy toca un buen descanso y ya volveré con la mente más fresca más adelante. 
+
+
 ### Conclusiones y próximos objetivos
 
 Bueno, me ha llevado más días de los esperados pero no ha estado mal esta sesión.
 
-La hipótesis del duplicado es, al final, solo una hipótesis. Pero dejo el .bin en el repo por si alguien quiere mirarlo. 
+La hipótesis del duplicado es, al final, solo una hipótesis (Corrección: explicación añadida en la `sección añadida a posteriori`). Dejo los dos .bin en el repo por si alguien quiere mirarlo. 
 
 El siguiente probablemente sea el router que tengo pendiente, pero no puedo asegurar cuándo. Todavía tengo pendiente en el repo de reversing analizar más a fondo el firmware de un router de TP-Link que me descargué de su web oficial, aprender la ISA y ABI de MIPS, seguir estudiando... Pero irán llegando cosas poco a poco. Este writeup era para enseñar y autoenseñarme la metodología, aunque no todo es un método extrapolable debo aclarar. 
 
