@@ -25,7 +25,8 @@ La parte del análisis de firmware se hará en el repositorio de reversing en el
 ### Objetivos de práctica
 
 Estos no serán objetivos de hardware hacking pero podrían ser útiles para adquirir experiencia con hardware, interfaces, componentes, buses y técnicas de extracción.
-* **ratón logitech Bluetooth***
+
+* **Ratón logitech Bluetooth**
 * **Mando consola**
 * **Altavoz Bluetooth**
 * **D-Link DES-1005d** - Switch Ethernet
