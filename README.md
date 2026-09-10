@@ -18,7 +18,7 @@ La parte del análisis de firmware se hará en el repositorio de reversing en el
 * **Gateway DOCSIS 3.0 CG6640E**
 * **Router Huawei hg556a (HW: HG56BZRB VER.A)**
 * **Router Inteno DG200A-AC + ONT Zhone ZNID-GPON-2301**
-* **3 móviles y una tablet** - 2 xiaomi, un samsung y la tablet android. Los 4 diría que son de entre el 2010 y 2017 como mucho, y de uno de los teléfonos tengo la placa base pero el teléfono estaba bastante roto, por lo que quizá al final no sea posible. Este último sería el más moderno de los objetivos aquí mencionados, veremos.
+* **3 móviles y una tablet** - 2 xiaomi, un samsung y la tablet android. Los 4 diría que son de entre el 2010 y 2020 como mucho, y de uno de los teléfonos tengo la placa base pero el teléfono estaba bastante roto, por lo que quizá al final no sea posible. Este último sería el más moderno de los objetivos aquí mencionados, veremos.
 * **Una televisión que todavía está pendiente de confirmar si es smart** - Si al final no lo es, lo quitaré de aquí.
 * **Un target que en el primer writeup menciono como sorpresa**
 
