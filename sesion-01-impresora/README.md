@@ -12,6 +12,8 @@ Lo remarco, es más la primera toma, pero los objetivos interesantes son los sma
 
 *Nota: para ver todos los targets que hay actualmente, compruébalo en el readme del repositorio. Puede que vaya añadiendo sobre la marcha, por lo que no es una lista fija. Pero los que salen ahí son confirmados que están en mi posesión*
 
+*Nota2: enlazo al writeup del bus pirate donde confirmamos lo que verás al final de este writeup. Te lo dejo aquí por si quieres echarle un ojo: [bus pirate writeup](https://github.com/unlinkedbyte/Hardware-hacking-learning-journey/blob/main/sesion-02-buspirate/README.md)*
+
 ### El laboratorio
 
 No es que haga falta un laboratorio caro para empezar a poder cacharrear. Eso sí, para que os hagáis una idea, yo he invertido unos 250€ aproximadamente, y siempre van saliendo cosillas. Además, remarcar que muchas de las herramientas son low-cost. No tengo por ejemplo el bus pirate v6 todavía y me faltarían más cosas para objetivos difíciles (o diferentes). Para los primeros objetivos, con lo que tengo llega (es decir, actualmente objetivos de práctica y routers. Los objetivos de práctica, debo decir, puede ser un gran abanico de variedad). Dicho esto, no te compres lo que hay aquí sin investigar antes y sin mirar tu presupuesto, puede que lo que yo tenga no te sirva o no sea lo que necesitas en el momento. 
