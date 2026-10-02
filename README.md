@@ -37,3 +37,4 @@ Estos no serán objetivos de hardware hacking pero podrían ser útiles para adq
 
 Aquí irán los writeups de cada sesión que decida subir:
 * **[Primer writeup impresora HP 2006](./sesion-01-impresora)** - El primer objetivo de prácticas donde he practicado reconocimiento y volcado de la EEPROM
+* **[Segundo writeup - trasteando con el bus pirate](./sesion-02-buspirate)** - Primeros pasos con el bus pirate y confirmando y verificando las conclusiones que sacamos en el primer writeup, el de la impresora.
