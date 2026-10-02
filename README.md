@@ -10,7 +10,7 @@ La parte del análisis de firmware se hará en el repositorio de reversing en el
 
 *nota1: actualmente estoy aprendiendo MIPS para los 4 routers que tengo en los targets actuales, por lo que quizá todo avance algo más lento. Además, tengo que acabar un análisis de firmware que tengo pendiente todavía en el repo de reversing, que lo empecé antes de tener el laboratorio montado.*
 
-*nota2: si estás empezando y quieres ver lo que contiene el laboratorio, está casi todo listado en el writeup de la impresora (tienes el enlace al final), a excepción del bus pirate v6 que está en camino.*
+*nota2: si estás empezando y quieres ver lo que contiene el laboratorio, está casi todo listado en el writeup de la impresora (tienes el enlace al final), a excepción del bus pirate que ya me ha llegado y una estación de soldadura nueva.*
 
 ### Targets actuales
 
